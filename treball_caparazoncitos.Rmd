@@ -1,0 +1,166 @@
+---
+title: "Trabajo econometria"
+author: "Dongjun Li"
+date: "2026-05-05"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(dplyr)
+
+load("dades_caparaconcitos.RData")
+```
+
+# Preparación y limpieza
+```{r}
+# Se agrupan los nombres de las variables para que coincidan en todos los años
+names(dades_p_2023) <- names(dades_p_2011) 
+names(dades_p_2024) <- names(dades_p_2011) 
+
+names(dades_r_2023) <- names(dades_r_2011) 
+names(dades_r_2024) <- names(dades_r_2011) 
+```
+
+
+```{r}
+# 1. Creamos una lista con todos tus datasets para procesarlos en bloque
+lista_d <- list(
+  "2011" = dades_d_2011,
+  "2014" = dades_d_2014,
+  "2019" = dades_d_2019,
+  "2023" = dades_d_2023,
+  "2024" = dades_d_2024
+)
+
+# 2. Procesamos en bloque:
+# - Convertimos TODO a character (así evitamos el error de tipos)
+# - Añadimos la columna año
+lista_d_procesada <- imap(lista_d, ~ .x %>% 
+                            mutate(across(everything(), as.character),
+                                   year = .y))
+
+# 3. Unimos los datasets
+dades_d <- bind_rows(lista_d_procesada)
+
+
+# Ejemplo para convertir las columnas clave que necesitas para analizar
+dades_d <- dades_d %>% 
+  mutate(
+    year = as.factor(year),
+    DB090 = as.numeric(DB090),
+    DB100 = as.factor(DB100),
+    DB040 = as.factor(DB040),
+  )
+```
+```{r}
+library(dplyr)
+library(purrr)
+
+# 1. Creamos una lista con todos tus datasets para procesarlos en bloque
+lista_p <- list(
+  "2011" = dades_p_2011,
+  "2014" = dades_p_2014,
+  "2019" = dades_p_2019,
+  "2023" = dades_p_2023,
+  "2024" = dades_p_2024
+)
+
+# 2. Procesamos en bloque:
+# - Convertimos TODO a character (así evitamos el error de tipos)
+# - Añadimos la columna año
+lista_p_procesada <- imap(lista_p, ~ .x %>% 
+                            mutate(across(everything(), as.character),
+                                   year = .y))
+
+# 3. Unimos los datasets
+dades_p <- bind_rows(lista_p_procesada)
+```
+
+
+
+```{r}
+# 1. Creamos una lista con todos tus datasets para procesarlos en bloque
+lista_h <- list(
+  "2011" = dades_h_2011,
+  "2014" = dades_h_2014,
+  "2019" = dades_h_2019,
+  "2023" = dades_h_2023,
+  "2024" = dades_h_2024
+)
+
+# 2. Procesamos en bloque:
+# - Convertimos TODO a character (así evitamos el error de tipos)
+# - Añadimos la columna año
+lista_h_procesada <- imap(lista_h, ~ .x %>% 
+                            mutate(across(everything(), as.character),
+                                   year = .y))
+
+# 3. Unimos los datasets
+dades_h <- bind_rows(lista_h_procesada)
+
+
+# Ejemplo para convertir las columnas clave que necesitas para analizar
+dades_h <- dades_h %>% 
+  mutate(
+    year = as.factor(year),
+    vhRentaa = as.numeric(vhRentaa),
+    HX240 = as.numeric(HX240),
+    HS040 = ifelse(HS040==2,0,1),
+    HS050 = ifelse(HS050==2,0,1),
+    HH050 = ifelse(HH050==2,0,1),
+    HS011 = as.factor(HS011),
+    HS021 = as.factor(HS021),
+    HS031 = as.factor(HS031)
+  )
+
+```
+
+```{r}
+# 1. Creamos una lista con todos tus datasets para procesarlos en bloque
+lista_r <- list(
+  "2011" = dades_r_2011,
+  "2014" = dades_r_2014,
+  "2019" = dades_r_2019,
+  "2023" = dades_r_2023,
+  "2024" = dades_r_2024
+)
+
+# 2. Procesamos en bloque:
+# - Convertimos TODO a character (así evitamos el error de tipos)
+# - Añadimos la columna año
+lista_r_procesada <- imap(lista_r, ~ .x %>% 
+                            mutate(across(everything(), as.character),
+                                   year = .y))
+
+# 3. Unimos los datasets
+dades_r <- bind_rows(lista_r_procesada)
+
+
+# Ejemplo para convertir las columnas clave que necesitas para analizar
+dades_r <- dades_r %>% 
+  mutate(
+    year = as.factor(year),
+    RB050 = as.numeric(RB050),
+    RB080 = as.numeric(RB080)
+  )
+```
+
+```{r}
+# 1. Unir Hogar (D + H)
+hogar_completo <- left_join(dades_d, dades_h, by = c("DB030" = "HB030", "year" = "year"))
+
+# 2. Unir Persona (R + P)
+persona_completa <- left_join(dades_r, dades_p, by = c("RB030" = "PB030", "year" = "year"))
+
+# 3. Unir Todo (Persona + Hogar)
+dataset_final <- left_join(persona_completa, hogar_completo, by = c("RB030" = "DB030", "year" = "year"))
+```
+
+## Serie temporal
+
+```{r}
+
+```
+
