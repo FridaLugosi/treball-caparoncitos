@@ -1,0 +1,129 @@
+---
+title: "Trabajo econometria"
+author: "Dongjun Li"
+date: "2026-05-05"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(spatstat.explore) # Librería recomendada para medianas ponderadas
+library(modelsummary)     # Para tablas profesionales y modelplot
+library(sjPlot)           # Para visualización de modelos
+```
+
+# Preparación y limpieza
+```{r}
+# Definición de años y variables de interés
+años <- c("2008", "2014", "2019", "2024", "2025")
+vars_interes <- c("DB030", "HB030", "PB030", "PB140", "PB150", "HY020", "HX240", "DB090")
+
+# Función para cargar y pre-procesar por año
+cargar_datos <- function(año) {
+  ruta <- paste0("C:/Users/ldong/Downloads/datos_", año, "/esudb", substr(año,3,4))
+  
+  d <- read.csv(paste0(ruta, "d.csv")) %>% mutate(across(everything(), as.character), year = año)
+  h <- read.csv(paste0(ruta, "h.csv")) %>% mutate(across(everything(), as.character), year = año)
+  p <- read.csv(paste0(ruta, "p.csv")) %>% mutate(across(everything(), as.character), year = año)
+  
+  # Unión de ficheros por hogar y año
+  hogar <- left_join(d, h, by = c("DB030" = "HB030", "year" = "year"))
+  
+  # Unión con personas y cálculo de variables
+  final <- p %>%
+    mutate(HB030 = as.character(floor(as.numeric(PB030) / 100))) %>%
+    left_join(hogar, by = c("HB030" = "DB030", "year" = "year")) %>%
+    select(any_of(vars_interes), year)
+  
+  return(final)
+}
+
+# Consolidación de la base de datos única
+datos_final <- map_df(años, cargar_datos) %>%
+  mutate(across(c(PB140, HY020, HX240, DB090, year), as.numeric),
+         renta = HY020 / HX240,
+         edad = year - PB140,
+         grupo_edad = case_when(
+           edad < 18 ~ "Menores de 18",
+           edad >= 18 & edad <= 29 ~ "Entre 18 y 29",
+           edad >= 30 & edad <= 44 ~ "Entre 30 y 44",
+           edad >= 45 & edad <= 64 ~ "Entre 45 y 64",
+           edad >= 65 ~ "Mayores de 65"
+         ),
+         sexo = factor(PB150, levels = c("1", "2"), labels = c("Hombre", "Mujer")))
+```
+
+
+```{r warning=FALSE}
+indicadores_pobreza <- datos_final %>%
+  group_by(year) %>%
+  mutate(
+    # Mediana PONDERADA (usando DB090) para cumplir el rigor estadístico
+    mediana_renta = weighted.median(renta, w = DB090, na.rm = TRUE),
+    umbral_60 = 0.6 * mediana_renta,
+    es_pobre = if_else(renta < umbral_60, 1, 0)
+  ) %>%
+  group_by(year, grupo_edad) %>%
+  summarise(
+    tasa_pobreza = weighted.mean(es_pobre, w = DB090, na.rm = TRUE) * 100
+  )
+
+
+ggplot(indicadores_pobreza, aes(x = year, y = tasa_pobreza, color = grupo_edad)) +
+  geom_line(size = 1) +
+  geom_point(size = 2) +
+  labs(title = "Evolución de la Tasa de Riesgo de Pobreza por Ciclo Vital",
+       subtitle = "Basado en microdatos de la ECV (2008-2025)",
+       x = "Año de la Encuesta",
+       y = "Tasa de Pobreza (%)",
+       color = "Cohorte de Edad") +
+  theme_minimal()
+```
+
+
+```{r}
+indicadores_pobreza_genero <- datos_final %>%
+  group_by(year) %>%
+  mutate(umbral_60 = 0.6 * weighted.median(renta, w = DB090, na.rm = TRUE),
+         es_pobre = if_else(renta < umbral_60, 1, 0)) %>%
+  group_by(year, grupo_edad, sexo) %>%
+  summarise(tasa_pobreza = weighted.mean(es_pobre, w = DB090, na.rm = TRUE) * 100, .groups = 'drop')
+
+# Gráfico de evolución por Ciclo Vital y Género
+ggplot(indicadores_pobreza_genero, aes(x = year, y = tasa_pobreza, color = grupo_edad)) +
+  geom_line(size = 1) + geom_point() +
+  facet_wrap(~sexo) +
+  labs(title = "Evolución de la Pobreza por Ciclo Vital y Género",
+       subtitle = "Desplazamiento del núcleo de pobreza hacia la infancia (2008-2025)",
+       x = "Año", y = "Tasa de Pobreza (%)") +
+  theme_minimal()
+```
+
+
+```{r}
+# Preparación de la muestra de 2025
+datos_2025 <- datos_final %>%
+  filter(year == 2025) %>%
+  mutate(es_pobre = if_else(renta < (0.6 * weighted.median(renta, w = DB090, na.rm = TRUE)), 1, 0),
+         grupo_edad = factor(grupo_edad, levels = c("Entre 45 y 64", "Menores de 18", 
+                                                    "Entre 18 y 29", "Entre 30 y 44", 
+                                                    "Mayores de 65")))
+
+# Estimación del modelo final
+modelo_final <- lm(es_pobre ~ grupo_edad + sexo, 
+                   data = datos_2025, 
+                   weights = DB090)
+
+# Visualización de resultados (Modelplot solicitado)
+modelplot(modelo_final, coef_omit = "Intercept") +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "red") +
+  labs(title = "Análisis de Riesgo Relativo de Pobreza (2025)",
+       subtitle = "Coeficientes estimados e intervalos de confianza (Ref: Hombres 45-64 años)",
+       x = "Incremento de probabilidad respecto al grupo de referencia",
+       y = "Variables de ciclo vital y control") +
+  theme_minimal()
+```
+
+
